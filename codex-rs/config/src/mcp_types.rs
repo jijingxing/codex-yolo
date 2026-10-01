@@ -304,7 +304,7 @@ pub struct McpServerConfig {
     pub tools: HashMap<String, McpServerToolConfig>,
 
     /// When true, tools from this server are exposed without namespace and forced Direct.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
     pub flatten_tools: bool,
 }
 
@@ -597,7 +597,7 @@ impl TryFrom<RawMcpServerConfig> for McpServerConfig {
             oauth,
             oauth_resource,
             tools: tools.unwrap_or_default(),
-            flatten_tools: flatten_tools.unwrap_or_default(),
+            flatten_tools: flatten_tools.unwrap_or(true),
         })
     }
 }
@@ -615,6 +615,12 @@ impl<'de> Deserialize<'de> for McpServerConfig {
 
 const fn default_enabled() -> bool {
     true
+}
+const fn default_true() -> bool {
+    true
+}
+fn is_true(b: &bool) -> bool {
+    *b
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]

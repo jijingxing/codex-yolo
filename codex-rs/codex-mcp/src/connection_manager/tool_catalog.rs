@@ -281,8 +281,13 @@ impl McpConnectionSet {
                 // Keep the catalog that lets us skip startup even if it expires during the wait.
                 let cached_tools = view.cached_startup_tools(/*fallback*/ None);
                 let has_cached_tools = cached_tools.is_some();
-                let must_wait_for_startup = (required
-                    && (!view.allows_cached_startup() || !has_cached_tools))
+                // yolo flatten: flattened servers are model-facing direct tools,
+                // always wait for their startup instead of silently omitting them.
+                let flattened =
+                    self.flattened_mcp_tool_servers.contains(server_name);
+                let must_wait_for_startup = flattened
+                    || (required
+                        && (!view.allows_cached_startup() || !has_cached_tools))
                     || required_servers
                         .iter()
                         .any(|required| required == server_name)
@@ -357,7 +362,9 @@ impl McpConnectionSet {
             } else {
                 // A server may opt out of caching after the first pass. Required catalog
                 // readiness must then wait for discovery rather than silently omit its tools.
+                // Flattened servers get the same treatment: never silently omit them.
                 if startup_pending
+                    && !self.flattened_mcp_tool_servers.contains(server_name)
                     && !(accepts_cached_catalog
                         && self.required_servers.binary_search(server_name).is_ok())
                 {

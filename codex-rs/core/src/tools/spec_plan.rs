@@ -226,7 +226,12 @@ fn apply_mcp_tool_exposure_policy(
     }
 
     // Flattened MCP servers: force Direct exposure, bypass namespace/deferred logic.
-    let flattened_servers: std::collections::HashSet<String> = mcp.config().flattened_mcp_tool_servers.iter().cloned().collect();
+    let flattened_servers: std::collections::HashSet<String> = mcp
+        .config()
+        .flattened_mcp_tool_servers
+        .iter()
+        .cloned()
+        .collect();
     for tool in registry.entries_mut() {
         let tool_name = tool.runtime.tool_name();
         // If this tool belongs to a flattened server, force Direct and skip omit handling.

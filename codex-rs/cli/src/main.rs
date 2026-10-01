@@ -183,7 +183,6 @@ enum Subcommand {
     /// Diagnose local Codex installation, config, auth, and runtime health.
     Doctor(DoctorCommand),
 
-
     /// Debugging tools.
     Debug(DebugCommand),
 

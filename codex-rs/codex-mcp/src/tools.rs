@@ -118,7 +118,12 @@ pub(crate) fn normalize_tools_for_model_with_prefix<I>(
 where
     I: IntoIterator<Item = ToolInfo>,
 {
-    normalize_tools_for_model_with_flatten(tools, prefix_mcp_tool_names, non_prefixed_mcp_tool_servers, &[])
+    normalize_tools_for_model_with_flatten(
+        tools,
+        prefix_mcp_tool_names,
+        non_prefixed_mcp_tool_servers,
+        &[],
+    )
 }
 
 pub(crate) fn normalize_tools_for_model_with_flatten<I>(

@@ -71,7 +71,6 @@ mod migrate_rollouts;
 mod plugin_cmd;
 mod queue_cmd;
 mod remote_control_cmd;
-#[cfg(target_os = "windows")]
 mod state_db_recovery;
 #[cfg(not(windows))]
 mod wsl_paths;

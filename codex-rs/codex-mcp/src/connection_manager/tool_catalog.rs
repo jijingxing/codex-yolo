@@ -32,7 +32,7 @@ use crate::rmcp_client::prepare_codex_apps_tools_for_model;
 use crate::runtime::emit_duration;
 use crate::tools::ToolInfo;
 use crate::tools::filter_tools;
-use crate::tools::normalize_tools_for_model_with_prefix;
+use crate::tools::normalize_tools_for_model_with_flatten;
 
 const MCP_UI_META_KEY: &str = "ui";
 const MCP_UI_VISIBILITY_META_KEY: &str = "visibility";
@@ -243,10 +243,11 @@ impl McpConnectionSet {
                 }
             }
         }
-        let tools = normalize_tools_for_model_with_prefix(
+        let tools = crate::tools::normalize_tools_for_model_with_flatten(
             tools,
             self.prefix_mcp_tool_names,
             &self.non_prefixed_mcp_tool_servers,
+            &self.flattened_mcp_tool_servers,
         );
         trace!(
             available_server_count,
@@ -400,10 +401,11 @@ impl McpConnectionSet {
             }
             listed_tools.extend(server_tools);
         }
-        let listed_tools = normalize_tools_for_model_with_prefix(
+        let listed_tools = crate::tools::normalize_tools_for_model_with_flatten(
             listed_tools,
             self.prefix_mcp_tool_names,
             &self.non_prefixed_mcp_tool_servers,
+            &self.flattened_mcp_tool_servers,
         );
         let mut tools = Vec::with_capacity(listed_tools.len());
         let mut calls = std::collections::HashMap::with_capacity(listed_tools.len());
@@ -574,10 +576,11 @@ impl McpConnectionSet {
         )
         .into_iter()
         .map(|tool| Self::with_server_metadata(tool, &view.metadata));
-        let tools = normalize_tools_for_model_with_prefix(
+        let tools = crate::tools::normalize_tools_for_model_with_flatten(
             tools,
             self.prefix_mcp_tool_names,
             &self.non_prefixed_mcp_tool_servers,
+            &self.flattened_mcp_tool_servers,
         );
         emit_duration(
             CODEX_APPS_REFRESH_DURATION_METRIC,

@@ -115,6 +115,16 @@ pub(crate) fn normalize_tools_for_model_with_prefix<I>(
     prefix_mcp_tool_names: bool,
     non_prefixed_mcp_tool_servers: &[String],
 ) -> Vec<ToolInfo>
+{
+    normalize_tools_for_model_with_flatten(tools, prefix_mcp_tool_names, non_prefixed_mcp_tool_servers, &[])
+}
+
+pub(crate) fn normalize_tools_for_model_with_flatten<I>(
+    tools: I,
+    prefix_mcp_tool_names: bool,
+    non_prefixed_mcp_tool_servers: &[String],
+    flattened_mcp_tool_servers: &[String],
+) -> Vec<ToolInfo>
 where
     I: IntoIterator<Item = ToolInfo>,
 {
@@ -136,10 +146,15 @@ where
             continue;
         }
 
-        let callable_namespace = callable_namespace_with_prefix(
-            &sanitize_responses_api_tool_name(&tool.callable_namespace),
-            prefix_mcp_tool_names && !non_prefixed_mcp_tool_servers.contains(&tool.server_name),
-        );
+        let callable_namespace = if flattened_mcp_tool_servers.contains(&tool.server_name) {
+            // Flattened: remove namespace entirely, expose as plain tool name.
+            String::new()
+        } else {
+            callable_namespace_with_prefix(
+                &sanitize_responses_api_tool_name(&tool.callable_namespace),
+                prefix_mcp_tool_names && !non_prefixed_mcp_tool_servers.contains(&tool.server_name),
+            )
+        };
 
         candidates.push(CallableToolCandidate {
             callable_namespace,

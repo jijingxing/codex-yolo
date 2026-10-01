@@ -1867,6 +1867,13 @@ impl Config {
             } else {
                 Vec::new()
             },
+            flattened_mcp_tool_servers: self
+                .mcp_servers
+                .get()
+                .iter()
+                .filter(|(_, cfg)| cfg.flatten_tools)
+                .map(|(name, _)| name.clone())
+                .collect(),
             protocol_mode: self.mcp_protocol_mode(),
             host_owned_apps_protocol_mode: if self.features.enabled(Feature::CodexAppsMcp20260728) {
                 McpProtocolMode::V20260728

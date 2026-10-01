@@ -302,6 +302,10 @@ pub struct McpServerConfig {
     /// Per-tool settings keyed by tool name.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub tools: HashMap<String, McpServerToolConfig>,
+
+    /// When true, tools from this server are exposed without namespace and forced Direct.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub flatten_tools: bool,
 }
 
 impl McpServerConfig {
@@ -432,6 +436,8 @@ pub struct RawMcpServerConfig {
     pub _name: Option<String>,
     #[serde(default)]
     pub tools: Option<HashMap<String, McpServerToolConfig>>,
+    #[serde(default)]
+    pub flatten_tools: Option<bool>,
 }
 
 impl TryFrom<RawMcpServerConfig> for McpServerConfig {
@@ -469,6 +475,7 @@ impl TryFrom<RawMcpServerConfig> for McpServerConfig {
             oauth_resource,
             _name: _,
             tools,
+            flatten_tools,
         } = raw;
 
         let startup_timeout_sec = match (startup_timeout_sec, startup_timeout_ms) {
@@ -590,6 +597,7 @@ impl TryFrom<RawMcpServerConfig> for McpServerConfig {
             oauth,
             oauth_resource,
             tools: tools.unwrap_or_default(),
+            flatten_tools: flatten_tools.unwrap_or_default(),
         })
     }
 }

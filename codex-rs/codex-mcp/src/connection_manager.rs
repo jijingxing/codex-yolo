@@ -217,6 +217,7 @@ pub(crate) struct McpConnectionSet {
     tool_plugin_context: Arc<ToolPluginContext>,
     prefix_mcp_tool_names: bool,
     non_prefixed_mcp_tool_servers: Vec<String>,
+    flattened_mcp_tool_servers: Vec<String>,
     elicitation_requests: ElicitationRequestManager,
     pub(crate) trusted_access: Option<TrustedAccessContext>,
 }
@@ -256,6 +257,7 @@ impl McpConnectionSet {
         let codex_home = config.codex_home.clone();
         let prefix_mcp_tool_names = config.prefix_mcp_tool_names;
         let non_prefixed_mcp_tool_servers = config.non_prefixed_mcp_tool_servers.clone();
+        let flattened_mcp_tool_servers = config.flattened_mcp_tool_servers.clone();
         let default_protocol_mode = config.protocol_mode;
         let host_owned_apps_protocol_mode = config.host_owned_apps_protocol_mode;
         let client_elicitation_capability = config.client_elicitation_capability.clone();

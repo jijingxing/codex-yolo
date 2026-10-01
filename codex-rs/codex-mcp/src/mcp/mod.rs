@@ -180,6 +180,8 @@ pub struct McpConfig {
     pub prefix_mcp_tool_names: bool,
     /// MCP servers whose model-visible tool namespaces omit the `mcp__` prefix.
     pub non_prefixed_mcp_tool_servers: Vec<String>,
+    /// MCP servers whose tools are flattened: namespace removed, forced Direct.
+    pub flattened_mcp_tool_servers: Vec<String>,
     /// Protocol mode for servers other than the host-owned Codex Apps registration.
     pub protocol_mode: McpProtocolMode,
     /// Independent protocol mode for the trusted, HTTP Codex Apps registration.

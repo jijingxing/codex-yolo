@@ -522,6 +522,12 @@ fn create_tool_spec(
         })
         .unwrap_or_default();
 
+    // Yolo flatten: tools with an empty callable namespace are exposed as bare
+    // native-equivalent functions so they merge into the default `functions`
+    // namespace instead of an empty-named group that models ignore.
+    if tool_info.callable_namespace.is_empty() {
+        return Ok(ToolSpec::Function(tool));
+    }
     Ok(ToolSpec::Namespace(ResponsesApiNamespace {
         name: tool_info.callable_namespace.clone(),
         description: take_bytes_at_char_boundary(&description, MAX_MCP_NAMESPACE_DESCRIPTION_BYTES)

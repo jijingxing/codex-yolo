@@ -11,7 +11,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: stable
           targets: x86_64-unknown-linux-musl
+      - name: Install musl target for pinned toolchain
+        run: |
+          rustup target add x86_64-unknown-linux-musl || true
+          rustup target add x86_64-unknown-linux-musl --toolchain 1.95.0 || rustup toolchain install 1.95.0 --target x86_64-unknown-linux-musl --profile minimal --no-self-update
       - name: Install musl tools
         run: sudo apt-get update && sudo apt-get install -y musl-tools
       - name: Build codex (yolo fork, no sandbox)

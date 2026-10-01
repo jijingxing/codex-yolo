@@ -1,0 +1,24 @@
+name: yolo-build
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - name: Install musl tools
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Build codex (yolo fork, no sandbox)
+        working-directory: codex-rs
+        run: cargo build --release --locked -p codex-cli --target x86_64-unknown-linux-musl
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-yolo-x86_64-linux-musl
+          path: codex-rs/target/x86_64-unknown-linux-musl/release/codex

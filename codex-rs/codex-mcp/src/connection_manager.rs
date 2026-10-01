@@ -792,6 +792,7 @@ impl McpConnectionSet {
             tool_plugin_context,
             prefix_mcp_tool_names,
             non_prefixed_mcp_tool_servers,
+            flattened_mcp_tool_servers,
             elicitation_requests: elicitation_requests.clone(),
             trusted_access,
         };
@@ -850,6 +851,7 @@ impl McpConnectionSet {
             tool_plugin_context: Arc::new(ToolPluginContext::default()),
             prefix_mcp_tool_names,
             non_prefixed_mcp_tool_servers: Vec::new(),
+            flattened_mcp_tool_servers: Vec::new(),
             elicitation_requests: ElicitationRequestManager::default(),
             trusted_access: None,
         }

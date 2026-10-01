@@ -678,6 +678,7 @@ fn mcp_server_config_for_url(
         omit_tools_from: None,
         disabled_reason: None,
         startup_timeout_sec: Some(Duration::from_secs(30)),
+        flatten_tools: true,
         tool_timeout_sec: None,
         default_tools_approval_mode: None,
         enabled_tools: None,

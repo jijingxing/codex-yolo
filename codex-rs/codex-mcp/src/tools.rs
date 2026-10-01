@@ -115,6 +115,8 @@ pub(crate) fn normalize_tools_for_model_with_prefix<I>(
     prefix_mcp_tool_names: bool,
     non_prefixed_mcp_tool_servers: &[String],
 ) -> Vec<ToolInfo>
+where
+    I: IntoIterator<Item = ToolInfo>,
 {
     normalize_tools_for_model_with_flatten(tools, prefix_mcp_tool_names, non_prefixed_mcp_tool_servers, &[])
 }

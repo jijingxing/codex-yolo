@@ -50,6 +50,7 @@ async fn refresh_keeps_superseded_mcp_server_alive_for_in_flight_calls() -> anyh
                     tool_input_schema_max_bytes: None,
                     omit_tools_from: None,
                     disabled_reason: None,
+                    flatten_tools: true,
                     startup_timeout_sec: Some(Duration::from_secs(10)),
                     tool_timeout_sec: None,
                     default_tools_approval_mode: None,

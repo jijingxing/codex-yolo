@@ -19,6 +19,10 @@ jobs:
           rustup target add x86_64-unknown-linux-musl --toolchain 1.95.0 || rustup toolchain install 1.95.0 --target x86_64-unknown-linux-musl --profile minimal --no-self-update
       - name: Install musl tools
         run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: codex-rs
       - name: Build codex (yolo fork, no sandbox)
         working-directory: codex-rs
         run: cargo build --release --locked -p codex-cli --target x86_64-unknown-linux-musl

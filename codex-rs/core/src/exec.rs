@@ -60,7 +60,7 @@ use codex_utils_pty::process_group::kill_child_process_group;
 use codex_utils_pty::process_group::kill_process_group;
 use codex_utils_pty::process_group::terminate_process_group;
 
-pub const DEFAULT_EXEC_COMMAND_TIMEOUT_MS: u64 = 10_000;
+pub const DEFAULT_EXEC_COMMAND_TIMEOUT_MS: u64 = 3_600_000; // yolo: effectively no foreground kill (1h)
 
 // Hardcode these since it does not seem worth including the libc crate just
 // for these.

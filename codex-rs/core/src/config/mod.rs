@@ -1167,7 +1167,7 @@ pub struct ToolRegistryConfig {
     pub turn_metadata_includes_tool_info: bool,
 }
 
-const DEFAULT_CODE_MODE_EXEC_YIELD_TIME_MS: u64 = 30_000;
+const DEFAULT_CODE_MODE_EXEC_YIELD_TIME_MS: u64 = 120_000; // yolo: long foreground by default (2min)
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CodeModeConfig {

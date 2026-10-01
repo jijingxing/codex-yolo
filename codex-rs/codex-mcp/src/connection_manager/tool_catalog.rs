@@ -408,6 +408,15 @@ impl McpConnectionSet {
             &self.non_prefixed_mcp_tool_servers,
             &self.flattened_mcp_tool_servers,
         );
+        tracing::info!(
+            tool_count = listed_tools.len(),
+            tool_names = ?listed_tools
+                .iter()
+                .map(|tool| tool.canonical_tool_name().to_string())
+                .collect::<Vec<_>>(),
+            flattened_servers = ?self.flattened_mcp_tool_servers,
+            "captured MCP tools for binding",
+        );
         let mut tools = Vec::with_capacity(listed_tools.len());
         let mut calls = std::collections::HashMap::with_capacity(listed_tools.len());
         for tool_info in listed_tools {

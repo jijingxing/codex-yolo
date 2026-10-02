@@ -905,7 +905,12 @@ impl ModelClient {
             input.retain(|item| !matches!(item, ResponseItem::ConfigurationUpdate { .. }));
         }
         let is_openai = self.state.provider.info().is_openai();
-        let (instructions, tools) = if model_info.use_responses_lite {
+        // Yolo: only OpenAI speaks Responses Lite. Third-party routers forward
+        // top-level `tools` to the model but drop `additional_tools` namespace
+        // groups, which keeps flattened MCP tools invisible. Everyone else gets
+        // the classic envelope with tools at the top level.
+        let use_responses_lite = model_info.use_responses_lite && is_openai;
+        let (instructions, tools) = if use_responses_lite {
             // These prompt-only items are rebuilt on every request. Hash their visible payloads
             // within the thread so retries and resumed sessions preserve their identity.
             let prefix_namespace = Uuid::new_v5(
@@ -998,7 +1003,7 @@ impl ModelClient {
             input,
             tools,
             tool_choice: "auto".to_string(),
-            parallel_tool_calls: prompt.parallel_tool_calls && !model_info.use_responses_lite,
+            parallel_tool_calls: prompt.parallel_tool_calls && !use_responses_lite,
             reasoning: Some(reasoning),
             store: false,
             stream: true,

@@ -81,7 +81,6 @@ use codex_login::default_client::create_client_for_route;
 use codex_otel::SessionTelemetry;
 use codex_otel::WEBSOCKET_CONTINUATION_COUNT_METRIC;
 use codex_otel::current_span_w3c_trace_context;
-use codex_protocol::ResponseItemId;
 use codex_protocol::auth::AuthMode;
 
 use codex_protocol::ThreadId;
@@ -99,8 +98,6 @@ use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::protocol::W3cTraceContext;
 use codex_rollout_trace::InferenceTraceAttempt;
 use codex_rollout_trace::InferenceTraceContext;
-use codex_tools::create_tools_json_for_responses_api;
-use codex_tools::create_tools_json_for_responses_lite;
 use codex_tools::create_tools_raw_json_for_responses_api;
 use eventsource_stream::Event;
 use eventsource_stream::EventStreamError;
@@ -119,7 +116,6 @@ use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 use tracing::trace;
 use tracing::warn;
-use uuid::Uuid;
 
 use crate::attestation::AttestationContext;
 use crate::attestation::AttestationProvider;
@@ -127,8 +123,6 @@ use crate::attestation::X_OAI_ATTESTATION_HEADER;
 use crate::client_common::Prompt;
 use crate::client_common::ResponseEvent;
 use crate::client_common::ResponseStream;
-use crate::context::BaseInstructionsFragment;
-use crate::context::ContextualUserFragment;
 use crate::cyber_access_program;
 use crate::feedback_tags;
 use crate::responses_metadata::CodexResponsesMetadata;
@@ -905,49 +899,14 @@ impl ModelClient {
             input.retain(|item| !matches!(item, ResponseItem::ConfigurationUpdate { .. }));
         }
         let is_openai = self.state.provider.info().is_openai();
-        // Yolo: only OpenAI speaks Responses Lite. Third-party routers forward
+        // Yolo: Responses Lite is removed. Third-party routers forward
         // top-level `tools` to the model but drop `additional_tools` namespace
-        // groups, which keeps flattened MCP tools invisible. Everyone else gets
-        // the classic envelope with tools at the top level.
-        let use_responses_lite = model_info.use_responses_lite && is_openai;
-        let (instructions, tools) = if use_responses_lite {
-            // These prompt-only items are rebuilt on every request. Hash their visible payloads
-            // within the thread so retries and resumed sessions preserve their identity.
-            let prefix_namespace = Uuid::new_v5(
-                &Uuid::NAMESPACE_OID,
-                self.state.thread_id.to_string().as_bytes(),
-            );
-            let tools = if self.state.provider.capabilities().namespace_tools {
-                create_tools_json_for_responses_lite(&prompt.tools)?
-            } else {
-                create_tools_json_for_responses_api(&prompt.tools)?
-            };
-            let mut prefix = vec![ResponseItem::AdditionalTools {
-                id: Some(ResponseItemId::with_suffix(
-                    "at",
-                    Uuid::new_v5(&prefix_namespace, &serde_json::to_vec(&tools)?),
-                )),
-                role: "developer".to_string(),
-                tools,
-            }];
-            if !prompt.base_instructions.text.is_empty() {
-                let mut instructions = ContextualUserFragment::into(BaseInstructionsFragment(
-                    prompt.base_instructions.text.clone(),
-                ));
-                instructions.set_id(Some(ResponseItemId::with_suffix(
-                    "msg",
-                    Uuid::new_v5(&prefix_namespace, prompt.base_instructions.text.as_bytes()),
-                )));
-                prefix.push(instructions);
-            }
-            input.splice(0..0, prefix);
-            (String::new(), None)
-        } else {
-            (
-                prompt.base_instructions.text.clone(),
-                Some(create_tools_raw_json_for_responses_api(&prompt.tools)?.into()),
-            )
-        };
+        // groups, which kept flattened MCP tools invisible. Always use the
+        // classic envelope with tools at the top level.
+        let (instructions, tools) = (
+            prompt.base_instructions.text.clone(),
+            Some(create_tools_raw_json_for_responses_api(&prompt.tools)?.into()),
+        );
         if !is_openai {
             for item in &mut input {
                 item.clear_internal_chat_message_metadata_passthrough();
@@ -1003,7 +962,7 @@ impl ModelClient {
             input,
             tools,
             tool_choice: "auto".to_string(),
-            parallel_tool_calls: prompt.parallel_tool_calls && !use_responses_lite,
+            parallel_tool_calls: prompt.parallel_tool_calls,
             reasoning: Some(reasoning),
             store: false,
             stream: true,
@@ -1703,11 +1662,7 @@ impl ModelClientSession {
             );
             let compression = self.responses_request_compression(client_setup.auth.as_ref());
             let mut options = self
-                .build_responses_options(
-                    responses_metadata,
-                    compression,
-                    model_info.use_responses_lite,
-                )
+                .build_responses_options(responses_metadata, compression, false)
                 .await;
 
             let mut request = self.client.build_responses_request(
@@ -1962,11 +1917,9 @@ impl ModelClientSession {
             {
                 crate::guardian::observe_guardian_request(session_telemetry, &request);
             }
-            let mut client_metadata = self.client.build_ws_client_metadata(
-                responses_metadata,
-                include_internal,
-                model_info.use_responses_lite,
-            );
+            let mut client_metadata =
+                self.client
+                    .build_ws_client_metadata(responses_metadata, include_internal, false);
             if let Some(turn_state) = self.turn_state.get() {
                 client_metadata.insert(X_CODEX_TURN_STATE_HEADER.to_string(), turn_state.clone());
             }

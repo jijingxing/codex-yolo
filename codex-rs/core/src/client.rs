@@ -98,6 +98,7 @@ use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::protocol::W3cTraceContext;
 use codex_rollout_trace::InferenceTraceAttempt;
 use codex_rollout_trace::InferenceTraceContext;
+use codex_tools::ToolSpec;
 use codex_tools::create_tools_raw_json_for_responses_api;
 use eventsource_stream::Event;
 use eventsource_stream::EventStreamError;
@@ -903,9 +904,18 @@ impl ModelClient {
         // top-level `tools` to the model but drop `additional_tools` namespace
         // groups, which kept flattened MCP tools invisible. Always use the
         // classic envelope with tools at the top level.
+        // Yolo: the upstream endpoint rejects `custom` (freeform grammar)
+        // tools, so strip them before sending. Everything else (functions,
+        // namespaces, web search) passes through unchanged.
+        let supported_tools: Vec<ToolSpec> = prompt
+            .tools
+            .iter()
+            .filter(|tool| !matches!(tool, ToolSpec::Freeform(_)))
+            .cloned()
+            .collect();
         let (instructions, tools) = (
             prompt.base_instructions.text.clone(),
-            Some(create_tools_raw_json_for_responses_api(&prompt.tools)?.into()),
+            Some(create_tools_raw_json_for_responses_api(&supported_tools)?.into()),
         );
         if !is_openai {
             for item in &mut input {

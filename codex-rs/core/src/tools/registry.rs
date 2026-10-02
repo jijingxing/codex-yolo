@@ -488,9 +488,28 @@ impl ToolRegistry {
     }
 
     pub(crate) fn tool(&self, name: &ToolName) -> Option<Arc<dyn CoreToolRuntime>> {
-        self.tools
-            .get(&name.clone().with_default_namespace())
+        let normalized = name.clone().with_default_namespace();
+        if let Some(tool) = self
+            .tools
+            .get(&normalized)
             .map(|tool| Arc::clone(&tool.runtime))
+        {
+            return Some(tool);
+        }
+        // Yolo fallback: flattened tools are advertised bare, but long-lived
+        // sessions can still call a stale namespaced (or dotted) form cached
+        // in an older prompt. Resolve by bare name only when unambiguous.
+        let bare = bare_tool_name(&normalized);
+        let mut candidate: Option<Arc<dyn CoreToolRuntime>> = None;
+        for (key, tool) in &self.tools {
+            if key.name == bare {
+                if candidate.is_some() {
+                    return None; // Ambiguous bare name; keep the miss visible.
+                }
+                candidate = Some(Arc::clone(&tool.runtime));
+            }
+        }
+        candidate
     }
 
     #[cfg(test)]
@@ -847,6 +866,23 @@ fn function_hook_tool_input(arguments: &str) -> Value {
     }
 
     serde_json::from_str(arguments).unwrap_or_else(|_| Value::String(arguments.to_string()))
+}
+
+/// Trailing tool-name segment used by the stale-namespace dispatch fallback.
+/// Handles both `namespace.name` and `namespace__name` model outputs.
+fn bare_tool_name(name: &ToolName) -> &str {
+    let mut bare = name.name.as_str();
+    if let Some((_, after)) = bare.rsplit_once('.') {
+        if !after.is_empty() {
+            bare = after;
+        }
+    }
+    if let Some((_, after)) = bare.rsplit_once("__") {
+        if !after.is_empty() {
+            bare = after;
+        }
+    }
+    bare
 }
 
 fn unsupported_tool_call_message(payload: &ToolPayload, tool_name: &ToolName) -> String {

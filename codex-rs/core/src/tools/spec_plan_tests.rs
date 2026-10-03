@@ -2794,47 +2794,31 @@ async fn multi_agent_feature_selects_one_agent_tool_family() {
         });
     })
     .await;
-    v2.assert_visible_contains(&[MULTI_AGENT_V2_NAMESPACE]);
     assert!(v2.can_manage_children);
-    v2.assert_visible_lacks(&[
+    // Yolo: collaboration tools are advertised as bare top-level functions, not
+    // wrapped in a namespace, so the call name the model echoes back matches a
+    // registry key directly.
+    v2.assert_visible_contains(&[
         "spawn_agent",
         "send_message",
         "followup_task",
         "wait_agent",
         "interrupt_agent",
         "list_agents",
+    ]);
+    v2.assert_visible_lacks(&[
+        MULTI_AGENT_V2_NAMESPACE,
         "send_input",
         "resume_agent",
         "assign_task",
         "close_agent",
     ]);
-    for tool_name in [
-        "spawn_agent",
-        "send_message",
-        "followup_task",
-        "wait_agent",
-        "interrupt_agent",
-        "list_agents",
-    ] {
-        assert!(
-            v2.namespace_function_names(MULTI_AGENT_V2_NAMESPACE)
-                .iter()
-                .any(|name| name == tool_name),
-            "expected {tool_name} in {MULTI_AGENT_V2_NAMESPACE} namespace"
-        );
-    }
-    let ToolSpec::Namespace(namespace) = v2.visible_spec(MULTI_AGENT_V2_NAMESPACE) else {
-        panic!("expected {MULTI_AGENT_V2_NAMESPACE} namespace");
-    };
-    let Some(ResponsesApiNamespaceTool::Function(spawn_agent)) =
-        namespace.tools.iter().find(|tool| {
-            matches!(
-                tool,
-                ResponsesApiNamespaceTool::Function(tool) if tool.name == "spawn_agent"
-            )
-        })
-    else {
-        panic!("expected spawn_agent in {MULTI_AGENT_V2_NAMESPACE} namespace");
+    assert!(
+        v2.namespace_function_names(MULTI_AGENT_V2_NAMESPACE).is_empty(),
+        "collaboration tools must not be grouped under {MULTI_AGENT_V2_NAMESPACE}"
+    );
+    let ToolSpec::Function(spawn_agent) = v2.visible_spec("spawn_agent") else {
+        panic!("expected spawn_agent to be a bare function spec");
     };
     let spawn_agent_properties = spawn_agent
         .parameters
@@ -2867,11 +2851,12 @@ async fn multi_agent_feature_selects_one_agent_tool_family() {
         });
     })
     .await;
-    direct_model_only.assert_visible_contains(&[MULTI_AGENT_V2_NAMESPACE]);
-    direct_model_only.assert_visible_lacks(&["spawn_agent", "send_message", "wait_agent"]);
+    // Code-mode-only models still get the bare tools so exec can reach them,
+    // but they are excluded from the nested code-mode surface.
+    direct_model_only.assert_visible_contains(&["spawn_agent", "send_message", "wait_agent"]);
+    direct_model_only.assert_visible_lacks(&[MULTI_AGENT_V2_NAMESPACE]);
     assert_eq!(
-        direct_model_only
-            .exposure(&ToolName::namespaced(MULTI_AGENT_V2_NAMESPACE, "spawn_agent").to_string()),
+        direct_model_only.exposure(&ToolName::plain("spawn_agent").to_string()),
         ToolExposure::DirectModelOnly
     );
 }
@@ -2882,17 +2867,9 @@ async fn multi_agent_v2_message_schemas_are_encrypted() {
         set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
     })
     .await;
-    let ToolSpec::Namespace(namespace) = plan.visible_spec(MULTI_AGENT_V2_NAMESPACE) else {
-        panic!("expected {MULTI_AGENT_V2_NAMESPACE} namespace");
-    };
     for tool_name in ["spawn_agent", "send_message", "followup_task"] {
-        let Some(ResponsesApiNamespaceTool::Function(tool)) = namespace.tools.iter().find(|tool| {
-            matches!(
-                tool,
-                ResponsesApiNamespaceTool::Function(tool) if tool.name == tool_name
-            )
-        }) else {
-            panic!("expected {tool_name} in {MULTI_AGENT_V2_NAMESPACE} namespace");
+        let ToolSpec::Function(tool) = plan.visible_spec(tool_name) else {
+            panic!("expected {tool_name} as a bare function spec");
         };
         let properties = tool
             .parameters
@@ -2918,16 +2895,14 @@ async fn multi_agent_v2_can_disable_wait_agent() {
     })
     .await;
 
-    assert_eq!(
-        plan.namespace_function_names(MULTI_AGENT_V2_NAMESPACE),
-        &[
-            "followup_task".to_string(),
-            "interrupt_agent".to_string(),
-            "list_agents".to_string(),
-            "send_message".to_string(),
-            "spawn_agent".to_string(),
-        ]
-    );
+    plan.assert_visible_contains(&[
+        "followup_task",
+        "interrupt_agent",
+        "list_agents",
+        "send_message",
+        "spawn_agent",
+    ]);
+    plan.assert_visible_lacks(&["wait_agent", MULTI_AGENT_V2_NAMESPACE]);
     plan.assert_visible_lacks(&["clock"]);
     plan.assert_registered_lacks(&["collaboration.wait_agent", "clock.sleep"]);
     assert!(plan.can_manage_children);
@@ -3313,8 +3288,13 @@ async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates(
             codex_code_mode::PUBLIC_TOOL_NAME,
             codex_code_mode::WAIT_TOOL_NAME,
             "request_user_input",
-            // Multi-agent v2 tools.
-            MULTI_AGENT_V2_NAMESPACE,
+            // Multi-agent v2 tools, advertised bare (see multi_agent_v2_*).
+            "spawn_agent",
+            "send_message",
+            "followup_task",
+            "wait_agent",
+            "interrupt_agent",
+            "list_agents",
             // Hosted Responses tools.
             "web_search",
         ]

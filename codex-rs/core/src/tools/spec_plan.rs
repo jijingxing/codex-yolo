@@ -1323,9 +1323,14 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
             } else {
                 ToolExposure::Direct
             };
-            let tool_namespace = namespace_tools_enabled(turn_context)
-                .then_some(turn_context.config.multi_agent_v2.tool_namespace.as_deref())
-                .flatten();
+            // Yolo: emit the collaboration tools as bare top-level functions.
+            // Wrapping them in a `collaboration` namespace relies on the router
+            // expanding that group before the model sees it; it does not, so
+            // the model echoes the namespace back as the call name and
+            // dispatch fails with `unsupported call: collaboration`. Bare names
+            // match the registry key directly, matching how flattened MCP
+            // tools are already advertised.
+            let tool_namespace: Option<String> = None;
             let agent_type_description =
                 agent_type_description(turn_context, context.default_agent_type_description);
             let hide_spawn_agent_metadata =

@@ -25,7 +25,26 @@ jobs:
           workspaces: codex-rs
       - name: Build codex (yolo fork, no sandbox)
         working-directory: codex-rs
+        env:
+          # The release profile keeps `strip = false` and embeds line tables so
+          # upstream's packaging step can archive symbols before stripping.
+          # This workflow uploads the binary directly, so without this the
+          # artifact carries ~1.0 GB of DWARF and lands at 1.4 GB. Strip here
+          # instead; the binary drops to roughly 250-300 MB. Crash stack traces
+          # lose symbol names as a result.
+          CARGO_PROFILE_RELEASE_STRIP: symbols
+          CARGO_PROFILE_RELEASE_DEBUG: none
         run: cargo build --release --locked -p codex-cli --target x86_64-unknown-linux-musl
+      - name: Report binary size
+        working-directory: codex-rs
+        run: |
+          BIN=target/x86_64-unknown-linux-musl/release/codex
+          echo "binary: $(du -h "$BIN" | cut -f1)"
+          if readelf -S -W "$BIN" | grep -q '\.debug_info'; then
+            echo "WARNING: debug sections still present; stripping did not apply"
+          else
+            echo "debug sections: none"
+          fi
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:

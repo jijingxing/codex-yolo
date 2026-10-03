@@ -51,16 +51,17 @@ pub(crate) async fn emit_sub_agent_activity(
     session.emit_turn_item_completed(turn, item).await;
 }
 
+/// Yolo: always deliver agent messages as plaintext.
+///
+/// `AgentMessage::Encrypted` puts the text in the Responses `encrypted_content`
+/// field and leaves `content` empty. Only the OpenAI backend decrypts that
+/// field; third-party routers pass it through untouched, so the spawned agent
+/// receives an empty task and has to guess. The `encrypted_content` field gives
+/// no protection on those providers anyway, since the text ships in cleartext
+/// inside a field the recipient never reads.
 fn agent_message_from_tool(
     message: String,
-    source: &crate::tools::context::ToolCallSource,
+    _source: &crate::tools::context::ToolCallSource,
 ) -> AgentMessage {
-    if matches!(
-        source,
-        crate::tools::context::ToolCallSource::DirectPlaintextMessage
-    ) {
-        AgentMessage::Plaintext(message)
-    } else {
-        AgentMessage::Encrypted(message)
-    }
+    AgentMessage::Plaintext(message)
 }

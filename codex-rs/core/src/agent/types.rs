@@ -62,6 +62,11 @@ pub enum MessageDeliveryMode {
 }
 
 /// Keeps model-provided encrypted content distinct from text that needs a context wrapper.
+///
+/// Yolo: only [`Self::Plaintext`] is constructed now. `Encrypted` routes the text
+/// through the Responses `encrypted_content` field, which only the OpenAI backend
+/// decodes; third-party providers hand the spawned agent an empty task. The variant
+/// stays so the delivery match remains exhaustive if OpenAI-only encryption returns.
 pub enum AgentMessage {
     Plaintext(String),
     Encrypted(String),

@@ -1171,8 +1171,8 @@ async fn multi_agent_v2_spawn_returns_path_and_send_message_accepts_relative_pat
                     if communication.author == AgentPath::root()
                         && communication.recipient.as_str() == "/root/test_process"
                         && communication.other_recipients.is_empty()
-                        && communication.content.is_empty()
-                        && communication.encrypted_content.as_deref() == Some("encrypted-spawn-message")
+                        && communication.encrypted_content.is_none()
+                        && communication.content.contains("encrypted-spawn-message")
                         && communication.trigger_turn
             )
     }));
@@ -1207,8 +1207,8 @@ async fn multi_agent_v2_spawn_returns_path_and_send_message_accepts_relative_pat
                     if communication.author == AgentPath::root()
                         && communication.recipient.as_str() == "/root/test_process"
                         && communication.other_recipients.is_empty()
-                        && communication.content.is_empty()
-                        && communication.encrypted_content.as_deref() == Some("encrypted-send-message")
+                        && communication.encrypted_content.is_none()
+                        && communication.content.contains("encrypted-send-message")
                         && !communication.trigger_turn
             )
     }));
@@ -1404,8 +1404,8 @@ async fn multi_agent_v2_send_message_accepts_root_target_from_child() {
                     if communication.author == child_path
                         && communication.recipient == AgentPath::root()
                         && communication.other_recipients.is_empty()
-                        && communication.content.is_empty()
-                        && communication.encrypted_content.as_deref() == Some("encrypted-done")
+                        && communication.encrypted_content.is_none()
+                        && communication.content.contains("encrypted-done")
                         && !communication.trigger_turn
             )
     }));
@@ -1922,8 +1922,8 @@ async fn multi_agent_v2_send_message_rejects_interrupt_parameter() {
             if communication.author == AgentPath::root()
                 && communication.recipient.as_str() == "/root/worker"
                 && communication.other_recipients.is_empty()
-                && communication.content.is_empty()
-                && communication.encrypted_content.as_deref() == Some("continue")
+                && communication.encrypted_content.is_none()
+                && communication.content.contains("continue")
                 && !communication.trigger_turn
     )));
 }
@@ -2008,7 +2008,8 @@ async fn multi_agent_v2_followup_task_completion_notifies_parent_on_every_turn()
                 Op::InterAgentCommunication { communication, .. }
                     if communication.author == AgentPath::root()
                         && communication.recipient == worker_path
-                        && communication.encrypted_content.as_deref() == Some("continue")
+                        && communication.encrypted_content.is_none()
+                        && communication.content.contains("continue")
                         && communication.trigger_turn
             )
     }));

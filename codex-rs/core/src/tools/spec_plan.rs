@@ -1330,7 +1330,7 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
             // dispatch fails with `unsupported call: collaboration`. Bare names
             // match the registry key directly, matching how flattened MCP
             // tools are already advertised.
-            let tool_namespace: Option<String> = None;
+            let tool_namespace: Option<&str> = None;
             let agent_type_description =
                 agent_type_description(turn_context, context.default_agent_type_description);
             let hide_spawn_agent_metadata =

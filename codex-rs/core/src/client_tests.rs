@@ -1077,6 +1077,107 @@ fn responses_lite_prefix_ids_track_thread_and_payload() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[test]
+fn freeform_tools_are_downgraded_to_function_tools() -> anyhow::Result<()> {
+    // Providers behind the router reject `type: "custom"` entries. The
+    // code-mode `exec` tool is freeform, so it must survive as a function
+    // tool rather than disappearing from the request.
+    let client = test_model_client(SessionSource::Cli);
+    let mut prompt = Prompt::default();
+    prompt.tools = vec![
+        codex_tools::ToolSpec::Freeform(codex_tools::FreeformTool {
+            name: "exec".to_string(),
+            description: "Execute JavaScript.".to_string(),
+            defer_loading: None,
+            format: codex_tools::FreeformToolFormat {
+                r#type: "grammar".to_string(),
+                syntax: "lark".to_string(),
+                definition: "start: /.+/".to_string(),
+            },
+        }),
+        codex_tools::ToolSpec::Function(codex_tools::ResponsesApiTool {
+            name: "verify_authorization".to_string(),
+            description: "Verify authorization.".to_string(),
+            strict: false,
+            defer_loading: None,
+            parameters: codex_tools::JsonSchema::object(
+                Default::default(),
+                None,
+                Some(false.into()),
+            ),
+            output_schema: None,
+        }),
+    ];
+
+    let request = client.build_responses_request(
+        &prompt,
+        &test_model_info(),
+        /*effort*/ None,
+        codex_protocol::config_types::ReasoningSummary::None,
+        /*service_tier*/ None,
+        &test_responses_metadata_for_client(
+            &client,
+            /*turn_id*/ None,
+            format!("{}:0", client.state.thread_id),
+            /*parent_thread_id*/ None,
+            TestCodexResponsesRequestKind::Turn,
+        ),
+        /*include_internal*/ true,
+    )?;
+
+    let body = serde_json::to_value(&request)?;
+    let tools = body["tools"]
+        .as_array()
+        .expect("tools serialize as a JSON array")
+        .clone();
+    assert_eq!(
+        tools.len(),
+        2,
+        "freeform tool must not be dropped: {tools:?}"
+    );
+
+    let exec = tools
+        .iter()
+        .find(|tool| tool["name"] == "exec")
+        .expect("exec must still be advertised");
+    assert_eq!(
+        exec["type"], "function",
+        "freeform tool must be downgraded to a function"
+    );
+    assert_eq!(
+        exec["parameters"]["properties"]["input"]["type"], "string",
+        "downgraded tool takes its body as a string argument"
+    );
+
+    // Flattened MCP functions ride along untouched.
+    assert!(
+        tools
+            .iter()
+            .any(|tool| tool["name"] == "verify_authorization" && tool["type"] == "function")
+    );
+    Ok(())
+}
+
+#[test]
+fn function_downgrade_matches_the_dispatch_helper() {
+    // The wire shape produced above must round-trip back to raw source text.
+    let source = "const out = await tools.exec_command({ cmd: \"ls\" });\ntext(out);";
+    let arguments = serde_json::json!({ "input": source }).to_string();
+    assert_eq!(
+        codex_tools::freeform_source_from_arguments(&arguments).expect("unwrap"),
+        source
+    );
+    // A provider that forwards the body unquoted still works.
+    assert_eq!(
+        codex_tools::freeform_source_from_arguments(&serde_json::json!(source).to_string())
+            .expect("unwrap bare string"),
+        source
+    );
+    // Missing or malformed arguments fail with guidance instead of panicking.
+    assert!(codex_tools::freeform_source_from_arguments("{}").is_err());
+    assert!(codex_tools::freeform_source_from_arguments("not json").is_err());
+}
+
 fn test_session_telemetry() -> SessionTelemetry {
     SessionTelemetry::new(
         ThreadId::new(),

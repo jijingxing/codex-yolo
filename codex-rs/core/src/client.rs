@@ -25,6 +25,7 @@
 //! WebSocket prewarm is treated as the first websocket connection attempt for a turn. If it
 //! fails, normal stream retry/fallback logic handles recovery on the same turn.
 
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
@@ -98,6 +99,9 @@ use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::protocol::W3cTraceContext;
 use codex_rollout_trace::InferenceTraceAttempt;
 use codex_rollout_trace::InferenceTraceContext;
+use codex_tools::FREEFORM_SOURCE_PARAMETER;
+use codex_tools::JsonSchema;
+use codex_tools::ResponsesApiTool;
 use codex_tools::ToolSpec;
 use codex_tools::create_tools_raw_json_for_responses_api;
 use eventsource_stream::Event;
@@ -904,14 +908,14 @@ impl ModelClient {
         // top-level `tools` to the model but drop `additional_tools` namespace
         // groups, which kept flattened MCP tools invisible. Always use the
         // classic envelope with tools at the top level.
-        // Yolo: the upstream endpoint rejects `custom` (freeform grammar)
-        // tools, so strip them before sending. Everything else (functions,
-        // namespaces, web search) passes through unchanged.
+        // Yolo: the upstream endpoint rejects `custom` (freeform grammar) tool
+        // entries with a 400. Downgrading them to plain function tools keeps
+        // them visible to the model instead of dropping them outright; dropping
+        // the code-mode `exec` tool also hid every tool it wraps.
         let supported_tools: Vec<ToolSpec> = prompt
             .tools
             .iter()
-            .filter(|tool| !matches!(tool, ToolSpec::Freeform(_)))
-            .cloned()
+            .map(downgrade_freeform_tool_for_non_custom_api)
             .collect();
         let (instructions, tools) = (
             prompt.base_instructions.text.clone(),
@@ -2317,6 +2321,38 @@ fn add_responses_lite_header(headers: &mut ApiHeaderMap, use_responses_lite: boo
             HeaderValue::from_static("true"),
         );
     }
+}
+
+/// Yolo: rewrite a freeform (grammar) tool as a plain function tool.
+///
+/// The upstream router rejects `type: "custom"` tool entries, so a freeform
+/// tool cannot be sent as-is. Emitting it as a function keeps it callable:
+/// the body travels as a JSON string argument, and handlers that expect raw
+/// source text (`exec`, `apply_patch`) unwrap it on dispatch.
+fn downgrade_freeform_tool_for_non_custom_api(tool: &ToolSpec) -> ToolSpec {
+    let ToolSpec::Freeform(freeform) = tool else {
+        return tool.clone();
+    };
+
+    ToolSpec::Function(ResponsesApiTool {
+        name: freeform.name.clone(),
+        description: freeform.description.clone(),
+        strict: false,
+        defer_loading: freeform.defer_loading,
+        parameters: JsonSchema::object(
+            BTreeMap::from([(
+                FREEFORM_SOURCE_PARAMETER.to_string(),
+                JsonSchema::string(Some(
+                    "Raw tool input exactly as documented in the description. \
+                     Do not wrap it in JSON and do not escape it."
+                        .to_string(),
+                )),
+            )]),
+            Some(vec![FREEFORM_SOURCE_PARAMETER.to_string()]),
+            Some(false.into()),
+        ),
+        output_schema: None,
+    })
 }
 
 const RESPONSE_STREAM_CHANNEL_CAPACITY: usize = 1600;

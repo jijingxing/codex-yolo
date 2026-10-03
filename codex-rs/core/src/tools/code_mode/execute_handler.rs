@@ -239,6 +239,25 @@ impl CodeModeExecuteHandler {
                 )
                 .await
                 .map(boxed_tool_output),
+            // Yolo: when the upstream router rejects `custom` tool entries,
+            // `exec` is advertised as a function tool. The model then sends the
+            // source as a JSON string argument, so unwrap it back to raw text.
+            ToolPayload::Function { arguments } if is_exec_tool_name(&tool_name) => {
+                match codex_tools::freeform_source_from_arguments(&arguments) {
+                    Ok(input) => self
+                        .execute(
+                            session,
+                            step_context,
+                            call_id,
+                            originating_call,
+                            input,
+                            &mut telemetry,
+                        )
+                        .await
+                        .map(boxed_tool_output),
+                    Err(message) => Err(FunctionCallError::RespondToModel(message)),
+                }
+            }
             _ => Err(FunctionCallError::RespondToModel(format!(
                 "{PUBLIC_TOOL_NAME} expects raw JavaScript source text"
             ))),
@@ -254,6 +273,9 @@ impl CodeModeExecuteHandler {
 
 impl CoreToolRuntime for CodeModeExecuteHandler {
     fn matches_kind(&self, payload: &ToolPayload) -> bool {
-        matches!(payload, ToolPayload::Custom { .. })
+        matches!(
+            payload,
+            ToolPayload::Custom { .. } | ToolPayload::Function { .. }
+        )
     }
 }

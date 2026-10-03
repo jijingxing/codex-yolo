@@ -242,6 +242,42 @@ fn handler_normalizes_only_the_default_namespace() {
 }
 
 #[test]
+fn flattened_tool_resolves_stale_namespaced_calls_when_unambiguous() {
+    // Yolo flatten advertises bare names; long-lived sessions may still call
+    // a stale namespaced (or dotted) form from an older prompt.
+    let bare = codex_tools::ToolName::plain("verify_authorization");
+    let handler = Arc::new(TestHandler {
+        tool_name: bare.clone(),
+    }) as Arc<dyn CoreToolRuntime>;
+    let registry = ToolRegistry::from_tools([Arc::clone(&handler)]);
+
+    for stale in [
+        codex_tools::ToolName::namespaced("verify_authorization", "verify_authorization"),
+        codex_tools::ToolName::namespaced("_d752e86c02f6", "verify_authorization"),
+        codex_tools::ToolName::plain("_d752e86c02f6.verify_authorization"),
+    ] {
+        assert!(
+            registry
+                .tool(&stale)
+                .as_ref()
+                .is_some_and(|resolved| Arc::ptr_eq(resolved, &handler)),
+            "stale form should resolve: {stale:?}",
+        );
+    }
+
+    // Ambiguous bare names must keep missing instead of guessing.
+    let other = Arc::new(TestHandler {
+        tool_name: codex_tools::ToolName::namespaced("other_ns", "verify_authorization"),
+    }) as Arc<dyn CoreToolRuntime>;
+    let crowded = ToolRegistry::from_tools([Arc::clone(&handler), Arc::clone(&other)]);
+    assert!(
+        crowded
+            .tool(&codex_tools::ToolName::namespaced("gone_ns", "verify_authorization"))
+            .is_none()
+    );
+}
+
+#[test]
 fn registry_rejects_default_namespace_alias_collisions() {
     let plain_name = codex_tools::ToolName::plain("lookup");
     let namespaced_name = codex_tools::ToolName::namespaced(DEFAULT_FUNCTION_NAMESPACE, "lookup");

@@ -328,10 +328,26 @@ impl ApplyPatchHandler {
             ..
         } = invocation;
 
-        let ToolPayload::Custom { input: patch_input } = payload else {
-            return Err(FunctionCallError::RespondToModel(
-                "apply_patch handler received unsupported payload".to_string(),
-            ));
+        // Yolo: `apply_patch` is a freeform tool, so providers that reject
+        // `type: "custom"` entries receive it as a function tool whose JSON
+        // string argument carries the patch text. Accept both shapes.
+        let patch_input = match payload {
+            ToolPayload::Custom { input } => input,
+            ToolPayload::Function { arguments } => {
+                match codex_tools::freeform_source_from_arguments(&arguments) {
+                    Ok(input) => input,
+                    Err(message) => {
+                        return Err(FunctionCallError::RespondToModel(format!(
+                            "apply_patch handler received unsupported payload: {message}"
+                        )));
+                    }
+                }
+            }
+            _ => {
+                return Err(FunctionCallError::RespondToModel(
+                    "apply_patch handler received unsupported payload".to_string(),
+                ));
+            }
         };
         let args = match codex_apply_patch::parse_patch(&patch_input) {
             Ok(args) => args,
@@ -404,7 +420,10 @@ impl ApplyPatchHandler {
 
 impl CoreToolRuntime for ApplyPatchHandler {
     fn matches_kind(&self, payload: &ToolPayload) -> bool {
-        matches!(payload, ToolPayload::Custom { .. })
+        matches!(
+            payload,
+            ToolPayload::Custom { .. } | ToolPayload::Function { .. }
+        )
     }
 
     fn create_diff_consumer(&self) -> Option<Box<dyn ToolArgumentDiffConsumer>> {

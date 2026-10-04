@@ -1130,7 +1130,7 @@ async fn multi_agent_v2_spawn_returns_path_and_send_message_accepts_relative_pat
             turn.clone(),
             "spawn_agent",
             function_payload(json!({
-                "message": "encrypted-spawn-message",
+                "message": "plain-spawn-message",
                 "task_name": "test_process"
             })),
         ))
@@ -1172,7 +1172,7 @@ async fn multi_agent_v2_spawn_returns_path_and_send_message_accepts_relative_pat
                         && communication.recipient.as_str() == "/root/test_process"
                         && communication.other_recipients.is_empty()
                         && communication.encrypted_content.is_none()
-                        && communication.content.contains("encrypted-spawn-message")
+                        && communication.content.contains("plain-spawn-message")
                         && communication.trigger_turn
             )
     }));
@@ -1193,7 +1193,7 @@ async fn multi_agent_v2_spawn_returns_path_and_send_message_accepts_relative_pat
             "send_message",
             function_payload(json!({
                 "target": "test_process",
-                "message": "encrypted-send-message"
+                "message": "plain-send-message"
             })),
         ))
         .await
@@ -1208,7 +1208,7 @@ async fn multi_agent_v2_spawn_returns_path_and_send_message_accepts_relative_pat
                         && communication.recipient.as_str() == "/root/test_process"
                         && communication.other_recipients.is_empty()
                         && communication.encrypted_content.is_none()
-                        && communication.content.contains("encrypted-send-message")
+                        && communication.content.contains("plain-send-message")
                         && !communication.trigger_turn
             )
     }));
@@ -1390,7 +1390,7 @@ async fn multi_agent_v2_send_message_accepts_root_target_from_child() {
             "send_message",
             function_payload(json!({
                 "target": "/root",
-                "message": "encrypted-done"
+                "message": "plain-done"
             })),
         ))
         .await
@@ -1405,7 +1405,7 @@ async fn multi_agent_v2_send_message_accepts_root_target_from_child() {
                         && communication.recipient == AgentPath::root()
                         && communication.other_recipients.is_empty()
                         && communication.encrypted_content.is_none()
-                        && communication.content.contains("encrypted-done")
+                        && communication.content.contains("plain-done")
                         && !communication.trigger_turn
             )
     }));

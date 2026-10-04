@@ -363,11 +363,10 @@ impl McpConnectionSet {
                 // A server may opt out of caching after the first pass. Required catalog
                 // readiness must then wait for discovery rather than silently omit its tools.
                 // Flattened servers get the same treatment: never silently omit them.
-                if startup_pending
-                    && !self.flattened_mcp_tool_servers.contains(server_name)
-                    && !(accepts_cached_catalog
-                        && self.required_servers.binary_search(server_name).is_ok())
-                {
+                let flattened = self.flattened_mcp_tool_servers.contains(server_name);
+                let required_with_catalog = accepts_cached_catalog
+                    && self.required_servers.binary_search(server_name).is_ok();
+                if startup_pending && !flattened && !required_with_catalog {
                     return None;
                 }
                 view.connection.client.reconnect_failed_startup().await;
@@ -415,7 +414,7 @@ impl McpConnectionSet {
             &self.non_prefixed_mcp_tool_servers,
             &self.flattened_mcp_tool_servers,
         );
-        tracing::info!(
+        tracing::debug!(
             tool_count = listed_tools.len(),
             tool_names = ?listed_tools
                 .iter()

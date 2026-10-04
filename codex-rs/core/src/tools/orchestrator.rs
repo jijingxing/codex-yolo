@@ -28,7 +28,6 @@ use crate::tools::sandboxing::unsandboxed_execution_allowed;
 use codex_otel::ToolDecisionSource;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::error::SandboxErr;
-use codex_protocol::exec_output::ExecToolCallOutput;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::permissions::PROTECTED_METADATA_PATH_NAMES;
 use codex_protocol::permissions::file_system_root;
@@ -136,10 +135,7 @@ impl ToolOrchestrator {
         let otel = turn_ctx.session_telemetry.clone();
         let otel_tn = flat_tool_name(&tool_ctx.tool_name).into_owned();
         let otel_ci = &tool_ctx.call_id;
-        let strict_auto_review = turn_ctx.strict_auto_review_enabled();
-        let _ = strict_auto_review;
         // 1) Approval
-        let mut already_approved = false;
 
         let environment = tool.turn_environment(req);
         let sandbox_manager = SandboxManager::new();
@@ -165,18 +161,30 @@ impl ToolOrchestrator {
         let requirement = tool.exec_approval_requirement(req).unwrap_or_else(|| {
             default_exec_approval_requirement(approval_policy, &file_system_sandbox_policy)
         });
-        // YOLO fork: auto-approve all tool calls; no guardian or user approval.
-        already_approved = true;
+        // Dropping the approval prompt is not the same as overriding the exec
+        // policy. `Forbidden` is the user's own policy hard-banning this
+        // command, and yolo must not silently execute it: that turns a policy
+        // the user wrote into a suggestion.
+        if let ExecApprovalRequirement::Forbidden { reason } = &requirement {
+            otel.tool_decision(
+                &tool_ctx.tool_name,
+                otel_ci,
+                &ReviewDecision::Denied {
+                    rejection: reason.clone(),
+                },
+                Some(ToolDecisionSource::Config),
+            );
+            return Err(ToolError::Rejected(reason.clone()));
+        }
+        // YOLO fork: auto-approve every remaining call; no guardian or user
+        // approval prompt.
+        let already_approved = true;
         otel.tool_decision(
             &tool_ctx.tool_name,
             otel_ci,
             &ReviewDecision::Approved,
             Some(ToolDecisionSource::Config),
         );
-        // Treat Forbidden as approved in yolo mode to avoid blocking.
-        if matches!(&requirement, ExecApprovalRequirement::Forbidden { .. }) {
-            // no-op: already approved above
-        }
 
         // 2) First attempt under the selected sandbox.
         let unsandboxed_allowed = unsandboxed_execution_allowed(&file_system_sandbox_policy);
@@ -423,20 +431,9 @@ impl ToolOrchestrator {
                     );
                     return Err(ToolError::Codex(err));
                 }
-                let retry_reason =
-                    if let Some(network_approval_context) = network_approval_context.as_ref() {
-                        format!(
-                            "Network access to \"{}\" is blocked by policy.",
-                            network_approval_context.host
-                        )
-                    } else {
-                        build_denial_reason_from_output(output.as_ref())
-                    };
-
-                // YOLO fork: retry escalation auto-approved; no second guardian review.
-                let _ = retry_reason;
-                let _ = network_approval_context.clone();
-
+                // YOLO fork: retry escalation is auto-approved; no second
+                // guardian review. Upstream built a `retry_reason` string here to
+                // show in the approval prompt, which yolo never shows.
                 let retry_sandbox_requested = !unsandboxed_allowed
                     && sandbox_manager.should_sandbox(
                         initial_permissions,
@@ -539,10 +536,4 @@ fn sandbox_outcome_from_tool_error(err: &ToolError) -> Option<&'static str> {
         },
         ToolError::Rejected(_) => None,
     }
-}
-
-fn build_denial_reason_from_output(_output: &ExecToolCallOutput) -> String {
-    // Keep approval reason terse and stable for UX/tests, but accept the
-    // output so we can evolve heuristics later without touching call sites.
-    "command failed; retry without sandbox?".to_string()
 }

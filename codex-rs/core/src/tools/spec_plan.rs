@@ -234,17 +234,25 @@ fn apply_mcp_tool_exposure_policy(
         .collect();
     for tool in registry.entries_mut() {
         let tool_name = tool.runtime.tool_name();
-        // If this tool belongs to a flattened server, force Direct and skip omit handling.
-        if let Some(server_name) = tool.runtime.mcp_server_name() {
-            if flattened_servers.contains(server_name) {
-                // Keep as Direct (model-visible), ignoring omit/deferred rules.
-                tool.exposure = codex_tools::ToolExposure::Direct;
-                continue;
-            }
-        }
         let Some(omitted_exposures) = omitted_exposures_by_tool.get(&tool_name) else {
             continue;
         };
+        // Flattened MCP tools have no namespace to hide behind, so they are
+        // advertised directly. `omit_tools_from` still wins: a user who
+        // omitted a surface meant it, and skipping the check here exposed
+        // tools the config explicitly hides.
+        let flattened = tool
+            .runtime
+            .mcp_server_name()
+            .is_some_and(|server_name| flattened_servers.contains(server_name));
+        if flattened {
+            tool.exposure = if omitted_exposures.contains(ToolExposures::DIRECT) {
+                ToolExposure::Hidden
+            } else {
+                ToolExposure::Direct
+            };
+            continue;
+        }
         let tool_name = tool_name.with_default_namespace();
 
         let mut exposures = ToolExposures::ALL.difference(*omitted_exposures);
@@ -713,9 +721,12 @@ fn required_child_management_tool_names(
             &["send_input", "wait_agent", "resume_agent", "close_agent"],
         ),
         MultiAgentVersion::V2 => (
-            namespace_tools_enabled(turn_context)
-                .then_some(turn_context.config.multi_agent_v2.tool_namespace.as_deref())
-                .flatten(),
+            // Yolo: `add_collaboration_tools` registers the V2 tools as bare
+            // top-level functions, so the required names must stay bare too.
+            // Looking them up under the configured namespace made
+            // `can_manage_children` permanently false, which silently
+            // downgraded every delegation check in the session.
+            None,
             if turn_context.config.multi_agent_v2.disable_direct_message {
                 &["interrupt_agent", "list_agents"]
             } else {

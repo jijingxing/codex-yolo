@@ -11,6 +11,25 @@ use std::sync::atomic::Ordering;
 
 struct TestHandler {
     tool_name: codex_tools::ToolName,
+    /// Set for handlers that stand in for a flattened MCP tool. The
+    /// stale-namespace dispatch fallback only applies to MCP-backed runtimes.
+    mcp_server_name: Option<&'static str>,
+}
+
+impl TestHandler {
+    fn new(tool_name: codex_tools::ToolName) -> Self {
+        Self {
+            tool_name,
+            mcp_server_name: None,
+        }
+    }
+
+    fn mcp(tool_name: codex_tools::ToolName, server_name: &'static str) -> Self {
+        Self {
+            tool_name,
+            mcp_server_name: Some(server_name),
+        }
+    }
 }
 
 impl ToolExecutor<ToolInvocation> for TestHandler {
@@ -37,7 +56,11 @@ impl ToolExecutor<ToolInvocation> for TestHandler {
     }
 }
 
-impl CoreToolRuntime for TestHandler {}
+impl CoreToolRuntime for TestHandler {
+    fn mcp_server_name(&self) -> Option<&str> {
+        self.mcp_server_name
+    }
+}
 
 struct ReadinessTestHandler {
     handler: TestHandler,
@@ -195,12 +218,8 @@ fn handler_normalizes_only_the_default_namespace() {
     let tool_name = "gmail_get_recent_emails";
     let plain_name = codex_tools::ToolName::plain(tool_name);
     let namespaced_name = codex_tools::ToolName::namespaced(namespace, tool_name);
-    let plain_handler = Arc::new(TestHandler {
-        tool_name: plain_name.clone(),
-    }) as Arc<dyn CoreToolRuntime>;
-    let namespaced_handler = Arc::new(TestHandler {
-        tool_name: namespaced_name.clone(),
-    }) as Arc<dyn CoreToolRuntime>;
+    let plain_handler = Arc::new(TestHandler::new(plain_name.clone())) as Arc<dyn CoreToolRuntime>;
+    let namespaced_handler = Arc::new(TestHandler::new(namespaced_name.clone())) as Arc<dyn CoreToolRuntime>;
     let registry =
         ToolRegistry::from_tools([Arc::clone(&plain_handler), Arc::clone(&namespaced_handler)]);
 
@@ -246,9 +265,8 @@ fn flattened_tool_resolves_stale_namespaced_calls_when_unambiguous() {
     // Yolo flatten advertises bare names; long-lived sessions may still call
     // a stale namespaced (or dotted) form from an older prompt.
     let bare = codex_tools::ToolName::plain("verify_authorization");
-    let handler = Arc::new(TestHandler {
-        tool_name: bare.clone(),
-    }) as Arc<dyn CoreToolRuntime>;
+    let handler =
+        Arc::new(TestHandler::mcp(bare.clone(), "verify_auth_server")) as Arc<dyn CoreToolRuntime>;
     let registry = ToolRegistry::from_tools([Arc::clone(&handler)]);
 
     for stale in [
@@ -265,10 +283,43 @@ fn flattened_tool_resolves_stale_namespaced_calls_when_unambiguous() {
         );
     }
 
+    // A legal built-in name that merely contains a separator must not be split
+    // into a different tool.
+    let dotted = codex_tools::ToolName::plain("weird.name");
+    let dotted_handler =
+        Arc::new(TestHandler::mcp(dotted.clone(), "dotted_server")) as Arc<dyn CoreToolRuntime>;
+    let dotted_registry = ToolRegistry::from_tools([Arc::clone(&dotted_handler)]);
+    assert!(
+        dotted_registry
+            .tool(&dotted)
+            .as_ref()
+            .is_some_and(|resolved| Arc::ptr_eq(resolved, &dotted_handler)),
+        "an unsuffixed dotted name must resolve to itself",
+    );
+    assert!(
+        dotted_registry
+            .tool(&codex_tools::ToolName::plain("name"))
+            .is_none(),
+        "splitting must not invent a tool named after the trailing segment",
+    );
+
+    // A stale namespace can only have come from an MCP server, so a built-in
+    // tool sharing the bare name must not be resolved through the fallback.
+    let builtin = Arc::new(TestHandler::new(codex_tools::ToolName::plain("shared_name")))
+        as Arc<dyn CoreToolRuntime>;
+    let builtin_only = ToolRegistry::from_tools([Arc::clone(&builtin)]);
+    assert!(
+        builtin_only
+            .tool(&codex_tools::ToolName::namespaced("stale_ns", "shared_name"))
+            .is_none(),
+        "the stale-namespace fallback must not resolve built-in tools",
+    );
+
     // Ambiguous bare names must keep missing instead of guessing.
-    let other = Arc::new(TestHandler {
-        tool_name: codex_tools::ToolName::namespaced("other_ns", "verify_authorization"),
-    }) as Arc<dyn CoreToolRuntime>;
+    let other = Arc::new(TestHandler::mcp(
+        codex_tools::ToolName::namespaced("other_ns", "verify_authorization"),
+        "other_server",
+    )) as Arc<dyn CoreToolRuntime>;
     let crowded = ToolRegistry::from_tools([Arc::clone(&handler), Arc::clone(&other)]);
     assert!(
         crowded
@@ -286,14 +337,10 @@ fn registry_rejects_default_namespace_alias_collisions() {
         [plain_name.clone(), namespaced_name.clone()],
         [namespaced_name, plain_name],
     ] {
-        let winner = Arc::new(TestHandler {
-            tool_name: first_name.clone(),
-        }) as Arc<dyn CoreToolRuntime>;
+        let winner = Arc::new(TestHandler::new(first_name.clone())) as Arc<dyn CoreToolRuntime>;
         let mut registry = ToolRegistry::from_tools([Arc::clone(&winner)]);
 
-        assert!(!registry.register_external(Arc::new(TestHandler {
-            tool_name: duplicate_name.clone(),
-        })));
+        assert!(!registry.register_external(Arc::new(TestHandler::new(duplicate_name.clone()))));
         assert!(
             registry
                 .tool(&duplicate_name)
@@ -318,7 +365,7 @@ fn registry_rejects_default_namespace_alias_collisions() {
 
 #[test]
 fn registry_preserves_external_winners_and_trusted_synthetic_order() {
-    let handler = |tool_name| Arc::new(TestHandler { tool_name }) as Arc<dyn CoreToolRuntime>;
+    let handler = |tool_name| Arc::new(TestHandler::new(tool_name)) as Arc<dyn CoreToolRuntime>;
     let [first_name, second_name, synthetic_name] =
         ["first", "second", "synthetic"].map(codex_tools::ToolName::plain);
     let first_handler = handler(first_name.clone());
@@ -346,7 +393,7 @@ fn registry_preserves_external_winners_and_trusted_synthetic_order() {
 
 #[test]
 fn reserved_command_tools_reject_external_runtimes_without_a_builtin() {
-    let handler = |tool_name| Arc::new(TestHandler { tool_name }) as Arc<dyn CoreToolRuntime>;
+    let handler = |tool_name| Arc::new(TestHandler::new(tool_name)) as Arc<dyn CoreToolRuntime>;
     let mut registry = ToolRegistry::default();
 
     for reserved_name in ["exec_command", "shell_command"] {
@@ -380,12 +427,8 @@ fn reserved_command_tools_reject_external_runtimes_without_a_builtin() {
 #[test]
 fn registry_records_reserved_exec_command_when_a_matching_tool_exists() {
     let tool_name = codex_tools::ToolName::plain("exec_command");
-    let trusted = Arc::new(TestHandler {
-        tool_name: tool_name.clone(),
-    }) as Arc<dyn CoreToolRuntime>;
-    let external = Arc::new(TestHandler {
-        tool_name: tool_name.clone(),
-    });
+    let trusted = Arc::new(TestHandler::new(tool_name.clone())) as Arc<dyn CoreToolRuntime>;
+    let external = Arc::new(TestHandler::new(tool_name.clone()));
     let mut registry = ToolRegistry::from_tools([trusted]);
 
     assert!(!registry.register_external(external));
@@ -395,7 +438,7 @@ fn registry_records_reserved_exec_command_when_a_matching_tool_exists() {
 
 #[test]
 fn registry_allows_identical_names_in_different_namespaces() {
-    let handler = |tool_name| Arc::new(TestHandler { tool_name }) as Arc<dyn CoreToolRuntime>;
+    let handler = |tool_name| Arc::new(TestHandler::new(tool_name)) as Arc<dyn CoreToolRuntime>;
     let mut registry = ToolRegistry::from_tools([handler(codex_tools::ToolName::namespaced(
         "first", "lookup",
     ))]);
@@ -415,24 +458,18 @@ async fn readiness_selects_exact_tool_with_registry_owned_exposure() {
     let plain_name = codex_tools::ToolName::plain("echo");
     let namespaced_name = codex_tools::ToolName::namespaced("mcp__server__", "echo");
     assert!(
-        TestHandler {
-            tool_name: plain_name.clone(),
-        }
+        TestHandler::new(plain_name.clone())
         .wait_until_ready(&session)
         .is_none()
     );
     let plain_readiness_waits = Arc::new(AtomicUsize::new(0));
     let namespaced_readiness_waits = Arc::new(AtomicUsize::new(0));
     let plain_handler = Arc::new(ReadinessTestHandler {
-        handler: TestHandler {
-            tool_name: plain_name.clone(),
-        },
+        handler: TestHandler::new(plain_name.clone()),
         readiness_waits: Arc::clone(&plain_readiness_waits),
     }) as Arc<dyn CoreToolRuntime>;
     let namespaced_handler = Arc::new(ReadinessTestHandler {
-        handler: TestHandler {
-            tool_name: namespaced_name.clone(),
-        },
+        handler: TestHandler::new(namespaced_name.clone()),
         readiness_waits: Arc::clone(&namespaced_readiness_waits),
     });
     let mut registry = ToolRegistry::from_tools([plain_handler]);
@@ -484,9 +521,7 @@ async fn readiness_selects_exact_tool_with_registry_owned_exposure() {
 async fn function_tools_expose_default_hook_payloads_and_rewrites() -> anyhow::Result<()> {
     let (session, turn) = crate::session::tests::make_session_and_context().await;
     let tool_name = codex_tools::ToolName::namespaced("functions.", "echo");
-    let handler = TestHandler {
-        tool_name: tool_name.clone(),
-    };
+    let handler = TestHandler::new(tool_name.clone());
     let invocation = ToolInvocation {
         payload: ToolPayload::Function {
             arguments: serde_json::json!({ "message": "hello" }).to_string(),
@@ -530,9 +565,7 @@ async fn function_tools_expose_default_hook_payloads_and_rewrites() -> anyhow::R
 async fn function_hook_input_defaults_empty_arguments_to_object() {
     let (session, turn) = crate::session::tests::make_session_and_context().await;
     let tool_name = codex_tools::ToolName::plain("echo");
-    let handler = TestHandler {
-        tool_name: tool_name.clone(),
-    };
+    let handler = TestHandler::new(tool_name.clone());
     let invocation = ToolInvocation {
         payload: ToolPayload::Function {
             arguments: "  ".to_string(),
@@ -562,9 +595,7 @@ async fn spawn_agent_function_tools_use_agent_matcher_alias() {
     ]
     .into_iter()
     .map(|tool_name| {
-        let handler = TestHandler {
-            tool_name: tool_name.clone(),
-        };
+        let handler = TestHandler::new(tool_name.clone());
         let invocation = ToolInvocation {
             payload: ToolPayload::Function {
                 arguments: serde_json::json!({ "message": "inspect this repo" }).to_string(),

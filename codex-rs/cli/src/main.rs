@@ -1790,6 +1790,7 @@ fn profile_v2_for_subcommand<'a>(
         | Subcommand::Delete(_)
         | Subcommand::Unarchive(_)
         | Subcommand::Fork(_)
+        | Subcommand::Mcp(_)
         | Subcommand::Debug(DebugCommand {
             subcommand: DebugSubcommand::PromptInput(_),
         }) => Ok(Some(profile_v2)),

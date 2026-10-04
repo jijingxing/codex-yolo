@@ -9,14 +9,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      # Keep this in sync with codex-rs/rust-toolchain.toml. The build runs with
+      # working-directory codex-rs, so cargo picks up that file and uses the
+      # pinned toolchain regardless of what is installed here; installing a
+      # second toolchain just doubled the cache and masked a version drift.
+      - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: stable
+          toolchain: 1.95.0
           targets: x86_64-unknown-linux-musl
-      - name: Install musl target for pinned toolchain
-        run: |
-          rustup target add x86_64-unknown-linux-musl || true
-          rustup target add x86_64-unknown-linux-musl --toolchain 1.95.0 || rustup toolchain install 1.95.0 --target x86_64-unknown-linux-musl --profile minimal --no-self-update
       - name: Install musl tools
         run: sudo apt-get update && sudo apt-get install -y musl-tools
       - name: Cache cargo build

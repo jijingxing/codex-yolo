@@ -498,11 +498,16 @@ impl ToolRegistry {
         }
         // Yolo fallback: flattened tools are advertised bare, but long-lived
         // sessions can still call a stale namespaced (or dotted) form cached
-        // in an older prompt. Resolve by bare name only when unambiguous.
-        let bare = bare_tool_name(&normalized);
+        // in an older prompt. Resolve by bare name only when unambiguous and
+        // only for MCP-backed runtimes: a built-in with the same bare name
+        // must never lose to a flattened MCP tool here, because the stale
+        // namespace can only have come from an MCP server.
+        let Some(bare) = stale_namespace_bare_name(&normalized) else {
+            return None;
+        };
         let mut candidate: Option<Arc<dyn CoreToolRuntime>> = None;
         for (key, tool) in &self.tools {
-            if key.name == bare {
+            if key.name == bare && tool.runtime.mcp_server_name().is_some() {
                 if candidate.is_some() {
                     return None; // Ambiguous bare name; keep the miss visible.
                 }
@@ -870,19 +875,23 @@ fn function_hook_tool_input(arguments: &str) -> Value {
 
 /// Trailing tool-name segment used by the stale-namespace dispatch fallback.
 /// Handles both `namespace.name` and `namespace__name` model outputs.
-fn bare_tool_name(name: &ToolName) -> &str {
-    let mut bare = name.name.as_str();
-    if let Some((_, after)) = bare.rsplit_once('.') {
-        if !after.is_empty() {
-            bare = after;
-        }
+///
+/// Returns `None` when the name carries no namespace prefix. Splitting an
+/// unsuffixed name would invent a different tool out of a legal name that
+/// merely contains `.` or `__`.
+fn stale_namespace_bare_name(name: &ToolName) -> Option<&str> {
+    let raw = name.name.as_str();
+    // Split on the last separator once. Chaining both splits mangled names such
+    // as `my__server.do` by trimming twice and landing on the wrong segment.
+    let bare = raw
+        .rsplit_once("__")
+        .map(|(_, after)| after)
+        .or_else(|| raw.rsplit_once('.').map(|(_, after)| after))?;
+    if bare.is_empty() || bare == raw {
+        None
+    } else {
+        Some(bare)
     }
-    if let Some((_, after)) = bare.rsplit_once("__") {
-        if !after.is_empty() {
-            bare = after;
-        }
-    }
-    bare
 }
 
 fn unsupported_tool_call_message(payload: &ToolPayload, tool_name: &ToolName) -> String {

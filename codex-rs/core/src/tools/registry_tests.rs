@@ -323,7 +323,10 @@ fn flattened_tool_resolves_stale_namespaced_calls_when_unambiguous() {
     let crowded = ToolRegistry::from_tools([Arc::clone(&handler), Arc::clone(&other)]);
     assert!(
         crowded
-            .tool(&codex_tools::ToolName::namespaced("gone_ns", "verify_authorization"))
+            .tool(&codex_tools::ToolName::namespaced(
+                "gone_ns",
+                "verify_authorization"
+            ))
             .is_none()
     );
 }

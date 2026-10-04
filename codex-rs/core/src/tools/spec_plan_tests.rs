@@ -2814,7 +2814,8 @@ async fn multi_agent_feature_selects_one_agent_tool_family() {
         "close_agent",
     ]);
     assert!(
-        v2.namespace_function_names(MULTI_AGENT_V2_NAMESPACE).is_empty(),
+        v2.namespace_function_names(MULTI_AGENT_V2_NAMESPACE)
+            .is_empty(),
         "collaboration tools must not be grouped under {MULTI_AGENT_V2_NAMESPACE}"
     );
     let ToolSpec::Function(spawn_agent) = v2.visible_spec("spawn_agent") else {

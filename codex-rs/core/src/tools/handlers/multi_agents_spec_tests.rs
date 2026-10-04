@@ -42,7 +42,9 @@ fn spawn_agent_tool_v2_requires_task_name() {
     assert!(properties.contains_key("task_name"));
     assert!(properties.contains_key("message"));
     assert_eq!(
-        properties.get("message").and_then(|schema| schema.encrypted),
+        properties
+            .get("message")
+            .and_then(|schema| schema.encrypted),
         None
     );
     assert!(properties.contains_key("fork_turns"));
@@ -258,7 +260,9 @@ fn send_message_tool_requires_message_and_has_no_output_schema() {
     assert!(properties.contains_key("target"));
     assert!(properties.contains_key("message"));
     assert_eq!(
-        properties.get("message").and_then(|schema| schema.encrypted),
+        properties
+            .get("message")
+            .and_then(|schema| schema.encrypted),
         None
     );
     assert!(!properties.contains_key("interrupt"));
@@ -304,7 +308,9 @@ fn followup_task_tool_requires_message_and_has_no_output_schema() {
     assert!(properties.contains_key("target"));
     assert!(properties.contains_key("message"));
     assert_eq!(
-        properties.get("message").and_then(|schema| schema.encrypted),
+        properties
+            .get("message")
+            .and_then(|schema| schema.encrypted),
         None
     );
     assert!(!properties.contains_key("items"));

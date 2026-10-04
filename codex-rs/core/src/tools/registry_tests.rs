@@ -219,7 +219,8 @@ fn handler_normalizes_only_the_default_namespace() {
     let plain_name = codex_tools::ToolName::plain(tool_name);
     let namespaced_name = codex_tools::ToolName::namespaced(namespace, tool_name);
     let plain_handler = Arc::new(TestHandler::new(plain_name.clone())) as Arc<dyn CoreToolRuntime>;
-    let namespaced_handler = Arc::new(TestHandler::new(namespaced_name.clone())) as Arc<dyn CoreToolRuntime>;
+    let namespaced_handler =
+        Arc::new(TestHandler::new(namespaced_name.clone())) as Arc<dyn CoreToolRuntime>;
     let registry =
         ToolRegistry::from_tools([Arc::clone(&plain_handler), Arc::clone(&namespaced_handler)]);
 
@@ -305,12 +306,16 @@ fn flattened_tool_resolves_stale_namespaced_calls_when_unambiguous() {
 
     // A stale namespace can only have come from an MCP server, so a built-in
     // tool sharing the bare name must not be resolved through the fallback.
-    let builtin = Arc::new(TestHandler::new(codex_tools::ToolName::plain("shared_name")))
-        as Arc<dyn CoreToolRuntime>;
+    let builtin = Arc::new(TestHandler::new(codex_tools::ToolName::plain(
+        "shared_name",
+    ))) as Arc<dyn CoreToolRuntime>;
     let builtin_only = ToolRegistry::from_tools([Arc::clone(&builtin)]);
     assert!(
         builtin_only
-            .tool(&codex_tools::ToolName::namespaced("stale_ns", "shared_name"))
+            .tool(&codex_tools::ToolName::namespaced(
+                "stale_ns",
+                "shared_name"
+            ))
             .is_none(),
         "the stale-namespace fallback must not resolve built-in tools",
     );
@@ -462,8 +467,8 @@ async fn readiness_selects_exact_tool_with_registry_owned_exposure() {
     let namespaced_name = codex_tools::ToolName::namespaced("mcp__server__", "echo");
     assert!(
         TestHandler::new(plain_name.clone())
-        .wait_until_ready(&session)
-        .is_none()
+            .wait_until_ready(&session)
+            .is_none()
     );
     let plain_readiness_waits = Arc::new(AtomicUsize::new(0));
     let namespaced_readiness_waits = Arc::new(AtomicUsize::new(0));

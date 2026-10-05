@@ -23,6 +23,7 @@ use crate::tool_catalog_cache::McpToolCatalogCache;
 use crate::tools::ToolFilter;
 use crate::tools::ToolInfo;
 use crate::tools::filter_tools;
+use crate::tools::normalize_tools_for_model_with_flatten;
 use crate::tools::normalize_tools_for_model_with_prefix;
 use assert_matches::assert_matches;
 use codex_config::AppToolApproval;
@@ -1919,6 +1920,70 @@ fn test_normalize_tools_disambiguates_sanitized_tool_name_collisions() {
         .map(|tool| tool.callable_name.as_str())
         .collect::<HashSet<_>>();
     assert_eq!(callable_tool_names.len(), 2);
+}
+
+#[test]
+fn test_normalize_tools_names_colliding_flattened_servers_after_the_server() {
+    let tools = vec![
+        create_test_tool("exa", "web_search_exa"),
+        create_test_tool("exa", "web_fetch_exa"),
+        create_test_tool("verify_authorization", "verify_authorization"),
+    ];
+
+    let model_tools = normalize_tools_for_model_with_flatten(
+        tools,
+        /*prefix_mcp_tool_names*/ true,
+        &[],
+        &["exa".to_string(), "verify_authorization".to_string()],
+    );
+
+    assert_eq!(model_tools.len(), 3);
+    let namespaces = model_tools
+        .iter()
+        .map(|tool| tool.callable_namespace.as_str())
+        .collect::<HashSet<_>>();
+    assert_eq!(
+        namespaces,
+        HashSet::from(["exa", "verify_authorization"]),
+        "colliding flattened servers must keep readable namespaces: {namespaces:?}"
+    );
+    assert!(
+        namespaces
+            .iter()
+            .all(|namespace| !namespace.starts_with('_')),
+        "no anonymous hash namespaces: {namespaces:?}"
+    );
+    // Tool names stay bare inside the group, so dispatch by bare name and the
+    // yolo stale-namespace fallback both keep working.
+    let names = model_tools
+        .iter()
+        .map(|tool| tool.callable_name.as_str())
+        .collect::<HashSet<_>>();
+    assert_eq!(
+        names,
+        HashSet::from(["web_search_exa", "web_fetch_exa", "verify_authorization"])
+    );
+}
+
+#[test]
+fn test_normalize_tools_keeps_a_lone_flattened_server_namespace_free() {
+    let tools = vec![create_test_tool(
+        "verify_authorization",
+        "verify_authorization",
+    )];
+
+    let model_tools = normalize_tools_for_model_with_flatten(
+        tools,
+        /*prefix_mcp_tool_names*/ true,
+        &[],
+        &["verify_authorization".to_string()],
+    );
+
+    assert_eq!(model_tools.len(), 1);
+    assert!(
+        model_tools[0].callable_namespace.is_empty(),
+        "a single flattened server must stay a bare function tool"
+    );
 }
 
 #[test]

@@ -1923,7 +1923,7 @@ fn test_normalize_tools_disambiguates_sanitized_tool_name_collisions() {
 }
 
 #[test]
-fn test_normalize_tools_names_colliding_flattened_servers_after_the_server() {
+fn test_normalize_tools_keeps_colliding_flattened_tools_bare() {
     let tools = vec![
         create_test_tool("exa", "web_search_exa"),
         create_test_tool("exa", "web_fetch_exa"),
@@ -1944,17 +1944,9 @@ fn test_normalize_tools_names_colliding_flattened_servers_after_the_server() {
         .collect::<HashSet<_>>();
     assert_eq!(
         namespaces,
-        HashSet::from(["exa", "verify_authorization"]),
-        "colliding flattened servers must keep readable namespaces: {namespaces:?}"
+        HashSet::from([""]),
+        "flattened tools must stay bare top-level functions: {namespaces:?}"
     );
-    assert!(
-        namespaces
-            .iter()
-            .all(|namespace| !namespace.starts_with('_')),
-        "no anonymous hash namespaces: {namespaces:?}"
-    );
-    // Tool names stay bare inside the group, so dispatch by bare name and the
-    // yolo stale-namespace fallback both keep working.
     let names = model_tools
         .iter()
         .map(|tool| tool.callable_name.as_str())
@@ -1966,23 +1958,37 @@ fn test_normalize_tools_names_colliding_flattened_servers_after_the_server() {
 }
 
 #[test]
-fn test_normalize_tools_keeps_a_lone_flattened_server_namespace_free() {
-    let tools = vec![create_test_tool(
-        "verify_authorization",
-        "verify_authorization",
-    )];
+fn test_normalize_tools_suffixes_same_named_tools_across_flattened_servers() {
+    // Two flattened servers exposing the same tool name share the empty
+    // namespace, so the clash has to be resolved on the tool name instead.
+    let tools = vec![
+        create_test_tool("server_one", "search"),
+        create_test_tool("server_two", "search"),
+    ];
 
     let model_tools = normalize_tools_for_model_with_flatten(
         tools,
         /*prefix_mcp_tool_names*/ true,
         &[],
-        &["verify_authorization".to_string()],
+        &["server_one".to_string(), "server_two".to_string()],
     );
 
-    assert_eq!(model_tools.len(), 1);
+    assert_eq!(model_tools.len(), 2);
     assert!(
-        model_tools[0].callable_namespace.is_empty(),
-        "a single flattened server must stay a bare function tool"
+        model_tools
+            .iter()
+            .all(|tool| tool.callable_namespace.is_empty()),
+        "flattened tools must stay bare"
+    );
+    let names = model_tool_names(&model_tools);
+    assert_eq!(
+        names.len(),
+        2,
+        "clashing names must be suffixed apart: {names:?}"
+    );
+    assert!(
+        names.iter().all(|name| name.name != "search"),
+        "the unsuffixed name must not survive the clash: {names:?}"
     );
 }
 

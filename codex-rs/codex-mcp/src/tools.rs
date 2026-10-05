@@ -166,7 +166,6 @@ where
         candidates.push(CallableToolCandidate {
             callable_namespace,
             callable_name: sanitize_responses_api_tool_name(&tool.callable_name),
-            server_name: tool.server_name.clone(),
             raw_namespace_identity,
             raw_tool_identity,
             tool,
@@ -186,25 +185,21 @@ where
         .collect::<HashSet<_>>();
     for candidate in &mut candidates {
         if colliding_namespaces.contains(&candidate.callable_namespace) {
-            candidate.callable_namespace = if candidate.callable_namespace.is_empty() {
-                // Yolo: every flattened MCP server collapses onto the empty
-                // namespace, so two or more of them collide here and used to
-                // fall back to an anonymous `_<hash>` name. The model cannot
-                // tell which server owns which tool from that. Name the group
-                // after the server instead; inner tool names are untouched, so
-                // dispatch by bare name keeps working.
-                let server_namespace = sanitize_responses_api_tool_name(&candidate.server_name);
-                if server_namespace.is_empty() || server_namespace == "_" {
-                    append_namespace_hash_suffix("", &candidate.raw_namespace_identity)
-                } else {
-                    server_namespace
-                }
-            } else {
-                append_namespace_hash_suffix(
+            // Yolo: a flattened server's namespace is empty on purpose. Its
+            // tools have to stay bare top-level functions, because the
+            // chat-translation routers this fork targets turn a `namespace`
+            // entry into a single empty function named after the group, which
+            // hides every tool inside it. Two flattened servers therefore
+            // collide on the empty namespace, and renaming them produced
+            // anonymous `_<hash>` groups the model could not read. Keep the
+            // empty namespace; a genuine clash between two same-named tools is
+            // disambiguated by the per-tool hash suffix below instead.
+            if !candidate.callable_namespace.is_empty() {
+                candidate.callable_namespace = append_namespace_hash_suffix(
                     &candidate.callable_namespace,
                     &candidate.raw_namespace_identity,
-                )
-            };
+                );
+            }
         }
     }
 
@@ -254,7 +249,6 @@ where
 #[derive(Debug)]
 struct CallableToolCandidate {
     tool: ToolInfo,
-    server_name: String,
     raw_namespace_identity: String,
     raw_tool_identity: String,
     callable_namespace: String,

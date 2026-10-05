@@ -337,6 +337,37 @@ fn flattened_tool_resolves_stale_namespaced_calls_when_unambiguous() {
 }
 
 #[test]
+fn mcp_tool_inside_a_named_group_resolves_its_bare_call() {
+    // After the flattened-server groups are named after the server, a model can
+    // still emit the inner tool's bare name instead of `server__tool`.
+    let handler = Arc::new(TestHandler::mcp(
+        codex_tools::ToolName::namespaced("exa", "web_search_exa"),
+        "exa",
+    )) as Arc<dyn CoreToolRuntime>;
+    let registry = ToolRegistry::from_tools([Arc::clone(&handler)]);
+
+    for call in [
+        codex_tools::ToolName::plain("web_search_exa"),
+        codex_tools::ToolName::namespaced("exa", "web_search_exa"),
+    ] {
+        assert!(
+            registry
+                .tool(&call)
+                .as_ref()
+                .is_some_and(|resolved| Arc::ptr_eq(resolved, &handler)),
+            "bare and qualified calls must both resolve: {call:?}",
+        );
+    }
+
+    // An unrelated bare name must not be invented from the qualified one.
+    assert!(
+        registry
+            .tool(&codex_tools::ToolName::plain("web_fetch_exa"))
+            .is_none()
+    );
+}
+
+#[test]
 fn registry_rejects_default_namespace_alias_collisions() {
     let plain_name = codex_tools::ToolName::plain("lookup");
     let namespaced_name = codex_tools::ToolName::namespaced(DEFAULT_FUNCTION_NAMESPACE, "lookup");

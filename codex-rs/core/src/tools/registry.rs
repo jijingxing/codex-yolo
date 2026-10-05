@@ -496,15 +496,14 @@ impl ToolRegistry {
         {
             return Some(tool);
         }
-        // Yolo fallback: flattened tools are advertised bare, but long-lived
-        // sessions can still call a stale namespaced (or dotted) form cached
-        // in an older prompt. Resolve by bare name only when unambiguous and
-        // only for MCP-backed runtimes: a built-in with the same bare name
-        // must never lose to a flattened MCP tool here, because the stale
-        // namespace can only have come from an MCP server.
-        let Some(bare) = stale_namespace_bare_name(&normalized) else {
-            return None;
-        };
+        // Yolo fallback: MCP tools are advertised inside a group named after the
+        // server, but models routinely call the inner tool by its bare name —
+        // that is also how the built-in `clock` group is called. Accept the bare
+        // name as well as a stale namespaced/dotted form cached in an older
+        // prompt. Resolve only when unambiguous and only for MCP-backed
+        // runtimes: an exact-name match above always wins, and a built-in with
+        // the same bare name must never lose to an MCP tool here.
+        let bare = stale_namespace_bare_name(&normalized).unwrap_or(normalized.name.as_str());
         let mut candidate: Option<Arc<dyn CoreToolRuntime>> = None;
         for (key, tool) in &self.tools {
             if key.name == bare && tool.runtime.mcp_server_name().is_some() {
